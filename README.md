@@ -1,4 +1,4 @@
-# Contador de días sin usar algo
+# Contador de días
 
 Aplicación de terminal en Python para llevar contadores personales con persistencia local en un archivo de texto. Permite crear, listar, consultar y eliminar contadores, y almacena la fecha y hora exacta de inicio para un seguimiento más preciso.
 
