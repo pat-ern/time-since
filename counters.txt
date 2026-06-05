@@ -1,2 +1,6 @@
 name|start_date|note
-instagram|2026-05-29|dias sin insta
+respond-dai|2026-05-28 10:00|sin pescar
+facebook|2026-05-28 19:00|sin usar face
+check-her|2026-06-04 00:08|check her profiles
+eat-badly|2026-06-04 00:08|comer masas
+instagram|2026-06-04 00:08|usar insta

@@ -2,11 +2,62 @@
 import argparse
 import csv
 import os
+import re
+import sys
 from datetime import datetime, date
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), 'counters.txt')
 DATE_TIME_FORMAT = '%Y-%m-%d %H:%M'
 DATE_FORMAT = '%Y-%m-%d'
+ANSI_BORDER = '\033[95m'
+ANSI_NAME = '\033[96m'
+ANSI_HEADER = '\033[1m'
+ANSI_RESET = '\033[0m'
+
+
+def is_tty():
+    return sys.stdout.isatty()
+
+
+def strip_ansi(text):
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
+def color_text(text, code):
+    if not is_tty():
+        return text
+    return f"{code}{text}{ANSI_RESET}"
+
+
+def print_table(headers, rows):
+    widths = []
+    for index, header in enumerate(headers):
+        max_len = len(strip_ansi(header))
+        for row in rows:
+            max_len = max(max_len, len(strip_ansi(str(row[index]))))
+        widths.append(max_len)
+
+    def border_line():
+        parts = [ANSI_BORDER + '+']
+        for width in widths:
+            parts.append('-' * (width + 2) + '+')
+        return ''.join(parts) + (ANSI_RESET if is_tty() else '')
+
+    def row_line(values, style=None):
+        parts = [ANSI_BORDER + '|']
+        for index, value in enumerate(values):
+            text = str(value)
+            pad = widths[index] - len(strip_ansi(text))
+            parts.append(' ' + text + ' ' * (pad + 1) + '|')
+        line = ''.join(parts)
+        return (style + line + ANSI_RESET) if style and is_tty() else line
+
+    print(border_line())
+    print(row_line(headers, ANSI_HEADER))
+    print(border_line())
+    for row in rows:
+        print(row_line(row))
+    print(border_line())
 
 
 def ensure_data_file():
@@ -95,12 +146,25 @@ def list_counters():
     if not counters:
         print('No hay contadores todavía. Agrega uno con el comando "add".')
         return
-    print('Contadores guardados:')
+
+    rows = []
     for item in counters:
         elapsed = elapsed_since(item['start_date'])
         elapsed_text = format_elapsed(elapsed) if elapsed is not None else 'fecha inválida'
-        note_text = f" - {item['note']}" if item['note'] else ''
-        print(f"- {item['name']}: {elapsed_text} (inicio {item['start_date']}){note_text}")
+        rows.append([
+            color_text(item['name'], ANSI_NAME),
+            item['start_date'],
+            elapsed_text,
+            item['note'],
+        ])
+
+    print('Contadores guardados:')
+    print_table([
+        'Nombre',
+        'Inicio',
+        'Tiempo transcurrido',
+        'Nota',
+    ], rows)
 
 
 def show_counter(name):
@@ -113,11 +177,19 @@ def show_counter(name):
     if elapsed is None:
         print(f"El contador '{name}' tiene una fecha de inicio inválida: {target['start_date']}")
         return
-    print(f"Contador: {target['name']}")
-    print(f"Inicio: {target['start_date']}")
-    print(f"Tiempo transcurrido: {format_elapsed(elapsed)}")
-    if target['note']:
-        print(f"Nota: {target['note']}")
+
+    rows = [[
+        color_text(target['name'], ANSI_NAME),
+        target['start_date'],
+        format_elapsed(elapsed),
+        target['note'],
+    ]]
+    print_table([
+        'Nombre',
+        'Inicio',
+        'Tiempo transcurrido',
+        'Nota',
+    ], rows)
 
 
 def delete_counter(name):
@@ -134,6 +206,24 @@ def delete_counter(name):
 
     save_counters(remaining)
     print(f"Contador '{name}' eliminado.")
+
+
+def reset_counter(name):
+    counters = parse_counters()
+    target = next((c for c in counters if c['name'].lower() == name.lower()), None)
+    if not target:
+        print(f"No se encontró ningún contador llamado '{name}'.")
+        return
+
+    print(f"Contador encontrado: {target['name']} (inicio actual {target['start_date']})")
+    respuesta = input(f"¿Deseas reiniciar este contador y establecer la fecha/hora de inicio a ahora? [s/N]: ")
+    if respuesta.strip().lower() not in ('s', 'si', 'y', 'yes'):
+        print('Reset cancelado.')
+        return
+
+    target['start_date'] = datetime.now().strftime(DATE_TIME_FORMAT)
+    save_counters(counters)
+    print(f"Contador '{name}' reiniciado con inicio {target['start_date']}.")
 
 
 def build_parser():
@@ -154,6 +244,9 @@ def build_parser():
     parser_delete = subparsers.add_parser('delete', help='Eliminar un contador por nombre')
     parser_delete.add_argument('name', help='Nombre del contador a eliminar')
 
+    parser_reset = subparsers.add_parser('reset', help='Reiniciar el inicio de un contador por nombre')
+    parser_reset.add_argument('name', help='Nombre del contador a reiniciar')
+
     return parser
 
 
@@ -169,6 +262,8 @@ def main():
         show_counter(args.name)
     elif args.command == 'delete':
         delete_counter(args.name)
+    elif args.command == 'reset':
+        reset_counter(args.name)
     else:
         parser.print_help()
 
